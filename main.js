@@ -4,7 +4,7 @@ import fs from 'fs';
 import log from './utils/logger.js';
 import iniBapakBudi from './utils/banner.js';
 import ngopiBro from './utils/contract.js';
-
+import { SocksProxyAgent } from 'socks-proxy-agent';
 
 function readWallets() {
     if (fs.existsSync("wallets.json")) {
@@ -21,16 +21,20 @@ const axiosInstance = axios.create({
     baseURL: API,
 });
 
-const get = async (url, token) => {
+const get = async (url, token, proxy) => {
     return await axiosInstance.get(url, {
         headers: {
             Authorization: `Bearer ${token}`,
         },
+        httpsAgent: proxy? proxy: undefined
     });
 };
 
-const post = async (url, data, config = {}) => {
-    return await axiosInstance.post(url, data, config);
+const post = async (url, data, proxy, config = {}) => {
+    return await axiosInstance.post(url, data, {
+        ...config,
+        httpsAgent: proxy? proxy: undefined
+    });
 };
 
 const sleep = (s) => {
@@ -48,9 +52,9 @@ async function signMessage(message, privateKey) {
     }
 }
 
-const getUser = async (token, retries = 3) => {
+const getUser = async (token, proxy, retries = 3) => {
     try {
-        const response = await get('user/getUserInfo', token);
+        const response = await get('user/getUserInfo', token, proxy);
         return response.data;
     }
     catch (error) {
@@ -65,16 +69,16 @@ const getUser = async (token, retries = 3) => {
         }
     }
 };
-const getNonce = async (walletAddress, retries = 3) => {
+const getNonce = async (walletAddress, retries = 3, proxy) => {
     try {
-        const res = await post(`wallet/generateNonce`, { walletAddress });
+        const res = await post(`wallet/generateNonce`, { walletAddress }, proxy);
         return res.data;
     } catch (error) {
         if (retries > 0) {
             log.error("Failed to get nonce:", error.message);
             log.warn(`Retrying... (${retries - 1} attempts left)`);
             await sleep(3);
-            return await getNonce(walletAddress, retries - 1);
+            return await getNonce(walletAddress, retries - 1, proxy);
         } else {
             log.error("Failed to get nonce after retries:", error.message);
             return null;
@@ -83,21 +87,23 @@ const getNonce = async (walletAddress, retries = 3) => {
     }
 };
 
-const login = async (address, message, signature, retries = 3) => {
+const login = async (address, message, signature, retries = 3, proxy) => {
     try {
-        const res = await post(`wallet/login`, {
-            address,
-            invitationCode: "9M8HC",
-            message,
-            signature,
-        });
+        const res = await post(`wallet/login`, 
+            {
+                address,
+                message,
+                signature,
+            },
+            proxy
+        );
         return res.data.data;
     } catch (error) {
         if (retries > 0) {
             log.error("Failed to login:", error.message);
             log.warn(`Retrying... (${retries - 1} attempts left)`);
             await sleep(3);
-            return await login(address, message, signature, retries - 1);
+            return await login(address, message, signature, retries - 1, proxy);
         } else {
             log.error("Failed to login after retries:", error.message);
             return null;
@@ -105,9 +111,9 @@ const login = async (address, message, signature, retries = 3) => {
     }
 };
 
-const getMinerStatus = async (token, retries = 3) => {
+const getMinerStatus = async (token, retries = 3, proxy) => {
     try {
-        const response = await get('assignment/totalMiningTime', token);
+        const response = await get('assignment/totalMiningTime', token, proxy);
         return response.data;
     }
     catch (error) {
@@ -115,7 +121,7 @@ const getMinerStatus = async (token, retries = 3) => {
             log.error("Failed to get user mine data:", error.message);
             log.warn(`Retrying... (${retries - 1} attempts left)`);
             await sleep(3);
-            return await getUser(token, retries - 1);
+            return await getUser(token, retries - 1, proxy);
         } else {
             log.error("Failed to get user mine data after retries:", error.message);
             return null;
@@ -123,20 +129,22 @@ const getMinerStatus = async (token, retries = 3) => {
     }
 };
 
-const startMine = async (token, retries = 3) => {
+const startMine = async (token, retries = 3, proxy) => {
     try {
         const res = await post(
             `assignment/startMining`,
             {},
-            { headers: { Authorization: `Bearer ${token}` } }
+            proxy,
+            { headers: { Authorization: `Bearer ${token}` }}
         );
+        console.log(res.data)
         return res.data;
     } catch (error) {
         if (retries > 0) {
             log.error("Failed to start mining:", error.message);
             log.warn(`Retrying... (${retries - 1} attempts left)`);
             await sleep(3);
-            return await startMine(token, retries - 1);
+            return await startMine(token, retries - 1, proxy);
         } else {
             log.error("Failed to start mining after retries:", error.message);
             return null;
@@ -145,7 +153,7 @@ const startMine = async (token, retries = 3) => {
 };
 
 const main = async () => {
-    log.info(iniBapakBudi)
+    // log.info(iniBapakBudi)
     const wallets = readWallets();
     if (wallets.length === 0) {
         log.error('', "No wallets found in wallets.json file - exiting program.");
@@ -157,7 +165,16 @@ const main = async () => {
         log.info(`Starting processing all wallets:`, wallets.length);
 
         for (const wallet of wallets) {
-            const nonceData = await getNonce(wallet.address);
+            console.log(wallet.proxyUrl)
+            const agent = wallet.proxyUrl? new SocksProxyAgent(wallet.proxyUrl): undefined;
+            const response = await axios.get(
+                'https://whatismyip.akamai.com', {
+                    httpsAgent: agent
+                }
+            )
+            console.log(response.data);
+
+            const nonceData = await getNonce(wallet.address,3, agent);
             if (!nonceData || !nonceData.data || !nonceData.data.nonce) {
                 log.error(`Failed to retrieve nonce for wallet: ${wallet.address}`);
                 continue;
@@ -170,7 +187,7 @@ const main = async () => {
                 continue;
             }
             log.info(`Trying To Login for wallet: ${wallet.address}`);
-            const loginResponse = await login(wallet.address, nonce, signature);
+            const loginResponse = await login(wallet.address, nonce, signature,3, agent);
             if (!loginResponse || !loginResponse.token) {
                 log.error(`Login failed for wallet: ${wallet.address}`);
                 continue;
@@ -179,7 +196,7 @@ const main = async () => {
             }
 
             log.info(`Trying to check user info...`);
-            const userData = await getUser(loginResponse.token);
+            const userData = await getUser(loginResponse.token,agent);
             if (userData && userData.data) {
                 const { userId, twName, totalReward } = userData.data;
                 log.info(`User Info:`, { userId, twName, totalReward });
@@ -192,7 +209,7 @@ const main = async () => {
             }
 
             log.info('Trying to check user miner status...')
-            const minerStatus = await getMinerStatus(loginResponse.token);
+            const minerStatus = await getMinerStatus(loginResponse.token, 3, agent);
             if (minerStatus && minerStatus.data) {
                 const lastMiningTime = minerStatus.data?.lastMiningTime || 0;
                 const nextMiningTime = lastMiningTime + 24 * 60 * 60;
@@ -200,18 +217,22 @@ const main = async () => {
                 const dateNow = new Date();
 
                 log.info(`Last mining time:`, new Date(lastMiningTime * 1000).toLocaleString());
+                
                 if (dateNow > nextDate) {
                     log.info(`Trying to start Mining for wallet: ${wallet.address}`);
-                    const mineResponse = await startMine(loginResponse.token);
-                    log.info('Mine response:', mineResponse)
-                    if (mineResponse) {
-                        log.info(`Trying to activate mining on-chain for wallet: ${wallet.address}`);
-                        const isMiningSuccess = await ngopiBro(wallet.privateKey)
-                        if (!isMiningSuccess) {
-                            log.error(`Wallet already start mine today or wallet dont have taker balance`);
+                    const mineOnchainResponse = await ngopiBro(wallet.privateKey)
+                    if (mineOnchainResponse) {
+                        console.log(`mine on chain success with tx hash : ${mineOnchainResponse}`)
+                        // start mine offchain
+                        const mineResponse = await startMine(loginResponse.token, 3, agent);
+                        console.log(mineResponse)
+                        if(mineResponse) {
+                            log.info("activate mine offchain success")
+                        }else {
+                            log.error("activate mine offchain failed")
                         }
-                    } else {
-                        log.error(`Failed to start mining for wallet: ${wallet.address}`);
+                    }else {
+                        log.error("error mining onchain")
                     }
                 } else {
                     log.warn(`Mining already started, next mining time is:`, nextDate.toLocaleString());
