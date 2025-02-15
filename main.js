@@ -5,6 +5,7 @@ import log from './utils/logger.js';
 import iniBapakBudi from './utils/banner.js';
 import ngopiBro from './utils/contract.js';
 import { SocksProxyAgent } from 'socks-proxy-agent';
+import 'dotenv/config'
 
 function readWallets() {
     if (fs.existsSync("wallets.json")) {
@@ -152,14 +153,27 @@ const startMine = async (token, retries = 3, proxy) => {
     }
 };
 
+const notifyToDiscord = async (webhookUrl,message) => {
+    try {
+        const res = await post(webhookUrl,message)
+        console.log("Embed message sent successfully:", res.data);
+        return res.data
+    } catch (error) {
+        log.error("Error sending webhook", error.response?.data || error.message)
+        return null
+    }
+}
+
 const main = async () => {
     // log.info(iniBapakBudi)
+    // console.log(process.env.DISCORD_WEBHOOK_URL)
     const wallets = readWallets();
     if (wallets.length === 0) {
         log.error('', "No wallets found in wallets.json file - exiting program.");
         process.exit(1);
     }
-
+    console.log(process.env.DISCORD_NOTIFICATION == true)
+    
     while (true) {
         log.warn('', ` === Sever is down bot might be slow - Just be patient ===`);
         log.info(`Starting processing all wallets:`, wallets.length);
@@ -228,6 +242,46 @@ const main = async () => {
                         console.log(mineResponse)
                         if(mineResponse) {
                             log.info("activate mine offchain success")
+                            // send success notification to discord
+                            log.info(`Recheck user info after activate...`);
+                            // recheck user info after activate
+                            const userDataAfterActivate = await getUser(loginResponse.token,agent);
+                            if (userDataAfterActivate && userDataAfterActivate.data) {
+                                const { userIdAfterActivate, twNameAfterActivate, totalRewardAfterActivate } = userDataAfterActivate.data;
+                                log.info(`User Info:`, { userIdAfterActivate, twNameAfterActivate, totalRewardAfterActivate });
+                                
+                                // send notification to discord
+                                if(process.env.DISCORD_NOTIFICATION) {
+                                    const testNotify = await notifyToDiscord(process.env.DISCORD_WEBHOOK_URL,
+                                        {
+                                            embeds: [
+                                                {
+                                                    title: "Activate taker daily mining success!",
+                                                    description: `address: ${wallet.address}`,
+                                                    color: 0x3498db, // Blue (Hex:rgb(24, 214, 24))
+                                                    fields: [
+                                                        {
+                                                            name: "point before activate",
+                                                            value: `${totalReward}`,
+                                                            inline: true
+                                                        },
+                                                        {
+                                                            name: "point after activate",
+                                                            value: `${totalRewardAfterActivate}`,
+                                                            inline: true
+                                                        }
+                                                    ],
+                                                    footer: {
+                                                        text: `onchain success with tx hash ${mineOnchainResponse}`
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    )
+                                }
+                            } else {
+                                log.error(`Failed to get user data for wallet: ${wallet.address}`);
+                            }
                         }else {
                             log.error("activate mine offchain failed")
                         }
