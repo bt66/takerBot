@@ -246,6 +246,7 @@ const main = async () => {
                             log.info(`Recheck user info after activate...`);
                             // recheck user info after activate
                             const userDataAfterActivate = await getUser(loginResponse.token,agent);
+                            console.log(userDataAfterActivate)
                             if (userDataAfterActivate && userDataAfterActivate.data) {
                                 const { userIdAfterActivate, twNameAfterActivate, totalRewardAfterActivate } = userDataAfterActivate.data;
                                 log.info(`User Info:`, { userIdAfterActivate, twNameAfterActivate, totalRewardAfterActivate });
@@ -262,12 +263,12 @@ const main = async () => {
                                                     fields: [
                                                         {
                                                             name: "point before activate",
-                                                            value: `${totalReward}`,
+                                                            value: `${userData.data.totalReward ? userData.data.totalReward : "undefined"}`,
                                                             inline: true
                                                         },
                                                         {
                                                             name: "point after activate",
-                                                            value: `${totalRewardAfterActivate}`,
+                                                            value: `${userDataAfterActivate.data.totalReward ? userDataAfterActivate.data.totalRewar : "undefined"}`,
                                                             inline: true
                                                         }
                                                     ],
