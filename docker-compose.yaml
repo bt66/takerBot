@@ -1,0 +1,8 @@
+services:
+  app:
+    container_name: taker_bot
+    image: taker_bot:v2
+    env_file:
+      - .env
+    volumes:
+      - ./wallets.json:/app/wallets.json

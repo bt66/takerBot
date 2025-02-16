@@ -1,11 +1,11 @@
 [
   {
-    "address": "address-1",
-    "privateKey": "privatekey-1",
-    "proxyUrl":"socks5://..."
+    "address": "0x88bc4222c2F043E93A0fc1B17f03D558281e287f",
+    "privateKey": "8219ec32f5e83a9e7495b6062a185ddd08a915fb11d0f8d9192700999ff625d3",
+    "proxyUrl": "socks5://10.10.78.123:10808"
   },
   {
-    "address": "address-2",
-    "privateKey": "privatekey-2"
+    "address": "0x209D4EDf0B5fCB6BAb7e57FC3699F67eAd2a5AFB",
+    "privateKey": "d07a7b8e56e59a6472a849845b556cde956508bf87f2dd41e76b3ae20f6dccec"
   }
 ]
